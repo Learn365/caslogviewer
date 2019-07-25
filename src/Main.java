@@ -1,3 +1,4 @@
+import com.sun.deploy.panel.ITreeNode;
 import sun.reflect.generics.tree.Tree;
 
 import javax.swing.*;
@@ -9,8 +10,7 @@ import javax.swing.tree.*;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
+import java.awt.event.*;
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
@@ -22,18 +22,22 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
 import java.util.List;
 
-public class Main extends JPanel implements ActionListener {
+public class Main extends JPanel implements ActionListener, ItemListener {
     JFileChooser chooser;
     JScrollPane scroll;
     JTree tree;
-
-    JTextArea text;
+    JTextField text;
     JButton button;
     FileReader reader;
     DefaultTreeModel treeModel;
     DefaultMutableTreeNode rootNode;
+    JComboBox choice;
+    String keyWord;
+    String action="只显示与其相关";
 
     public Main(){
         setLayout(new BorderLayout());
@@ -43,6 +47,7 @@ public class Main extends JPanel implements ActionListener {
     }
 
     public void init(){
+        JPanel pTop =new JPanel();
         rootNode  = new DefaultMutableTreeNode("Root Node");
         treeModel = new DefaultTreeModel(rootNode);
         treeModel.addTreeModelListener(new MyTreeModelListener());
@@ -51,13 +56,27 @@ public class Main extends JPanel implements ActionListener {
         tree.setEditable(true);
         tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         tree.setShowsRootHandles(true);
-
         scroll = new JScrollPane(tree);
         add(scroll,BorderLayout.CENTER);
 
+
+
         button = new JButton("打开文件..");
         button.addActionListener(this);
-        add(button,BorderLayout.NORTH);
+        pTop.add(button,BorderLayout.NORTH);
+
+        text = new JTextField(10);
+
+        choice = new JComboBox<>();
+        choice.addItem("只显示与其相关");
+        choice.addItem("过滤掉与其相关");
+        choice.addItemListener(this);
+
+        pTop.add(text,BorderLayout.SOUTH);
+        pTop.add(choice,BorderLayout.EAST);
+
+        add(pTop,BorderLayout.NORTH);
+//        add(button,BorderLayout.NORTH);
 
  //       text = new JTextArea(26,50);
         chooser = new JFileChooser();
@@ -66,10 +85,9 @@ public class Main extends JPanel implements ActionListener {
 
     @Override
     public void actionPerformed(ActionEvent e) {
-        System.out.println("00");
- //       addObject("00000");
         int state = chooser.showOpenDialog(null);
         if(state == JFileChooser.APPROVE_OPTION){
+            clear();
             File dir = chooser.getCurrentDirectory();
             String fileName = chooser.getSelectedFile().getName();
             File file = new File(dir,fileName);
@@ -79,10 +97,9 @@ public class Main extends JPanel implements ActionListener {
                 String s= null;
                 DefaultMutableTreeNode node=null;
                 while ( (s=in.readLine())!=null){
-                    if(s.matches("^\\d{4}\\-\\d{2}\\-\\d{2}\\s\\d{2}\\:\\d{2}\\:\\d{2}.*") ){
+                    if(s.matches("^\\d{4}\\-\\d{2}\\-\\d{2}\\s\\d{2}\\:\\d{2}\\:\\d{2}.*")&&s.contains("")){
                       node = addObject(rootNode,s,false);
                     }else{
-          //              node.setUserObject(node.getUserObject()+"\n"+s);
                         addObject(node,s,false);
                     }
                 }
@@ -92,6 +109,33 @@ public class Main extends JPanel implements ActionListener {
         }
     }
 
+    public void itemStateChanged(ItemEvent e){
+        if(e.getStateChange()== ItemEvent.SELECTED){
+            keyWord = text.getText().trim();
+            if(keyWord.length()==0){
+                return;
+            }
+            Enumeration ee=rootNode.children();
+            action = choice.getSelectedItem().toString();
+            List<Object> list= Collections.list(ee);
+            if(action =="只显示与其相关"){
+                for(Object o :list){
+                    if(       !o.toString().contains(keyWord)      ){
+ //                       System.out.println(o);
+                        rootNode.remove((MutableTreeNode) o);
+                    }
+                }
+            }else {
+                for(Object o :list){
+                    if(  (o.toString().contains(keyWord))  ){
+                        //                       System.out.println(o);
+                        rootNode.remove((MutableTreeNode) o);
+                    }
+                }
+            }
+            treeModel.reload();
+        }
+    }
     class MyTreeModelListener implements TreeModelListener {
         public void treeNodesChanged(TreeModelEvent e) {
             DefaultMutableTreeNode node;
@@ -195,6 +239,39 @@ public class Main extends JPanel implements ActionListener {
         return childNode;
     }
 
+    public void clear(){
+        rootNode.removeAllChildren();
+        treeModel.reload();
+    }
+
+    public void resolveFiles(String action,String keyWord){
+        Boolean containStatus;
+        int state = chooser.showOpenDialog(null);
+        if(state == JFileChooser.APPROVE_OPTION){
+            File dir = chooser.getCurrentDirectory();
+            String fileName = chooser.getSelectedFile().getName();
+            File file = new File(dir,fileName);
+            try{
+                reader = new FileReader(file);
+                BufferedReader in =new BufferedReader(reader);
+                String s= null;
+                DefaultMutableTreeNode node=null;
+                while ( (s=in.readLine())!=null){
+                    if (action == "只显示与其相关"){
+
+                    }
+                    if(s.matches("^\\d{4}\\-\\d{2}\\-\\d{2}\\s\\d{2}\\:\\d{2}\\:\\d{2}.*")&&s.contains(keyWord) ){
+                        node = addObject(rootNode,s,false);
+                    }else{
+                        //              node.setUserObject(node.getUserObject()+"\n"+s);
+                        addObject(node,s,false);
+                    }
+                }
+            }catch (Exception e2){
+                System.out.println(e2.toString());
+            }
+        }
+    }
 
 }
 
