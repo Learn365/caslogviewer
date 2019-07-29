@@ -1,4 +1,5 @@
 import com.sun.deploy.panel.ITreeNode;
+import org.omg.Messaging.SYNC_WITH_TRANSPORT;
 import sun.reflect.generics.tree.Tree;
 
 import javax.swing.*;
@@ -30,6 +31,7 @@ public class Main extends JPanel implements ActionListener, ItemListener {
     JFileChooser chooser;
     JScrollPane scroll;
     JTree tree;
+    JTree treeBackUp;
     JTextField text;
     JButton button;
     FileReader reader;
@@ -37,7 +39,15 @@ public class Main extends JPanel implements ActionListener, ItemListener {
     DefaultMutableTreeNode rootNode;
     JComboBox choice;
     String keyWord;
-    String action="只显示与其相关";
+    String action;
+    String logPath = null;
+    Boolean changed =false ;
+
+    public static String CMD_FILTER = "filter";
+    public static String CMD_SHOW = "show";
+    public static String CMD_ALL = "all";
+    public static String CMD_OPEN = "open";
+
 
     public Main(){
         setLayout(new BorderLayout());
@@ -53,19 +63,30 @@ public class Main extends JPanel implements ActionListener, ItemListener {
         treeModel.addTreeModelListener(new MyTreeModelListener());
 
         tree = new JTree(treeModel);
+
         tree.setEditable(true);
         tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         tree.setShowsRootHandles(true);
         scroll = new JScrollPane(tree);
         add(scroll,BorderLayout.CENTER);
 
-
-
         button = new JButton("打开文件..");
+        button.setActionCommand(CMD_OPEN);
         button.addActionListener(this);
         pTop.add(button,BorderLayout.NORTH);
 
         text = new JTextField(10);
+
+        JButton b1 = new JButton("过滤");
+        JButton b2 = new JButton("显示相关");
+        JButton b3 = new JButton("显示全部内容");
+        b1.setActionCommand(CMD_FILTER);
+        b2.setActionCommand(CMD_SHOW);
+        b3.setActionCommand(CMD_ALL);
+        b1.addActionListener(this);
+        b2.addActionListener(this);
+        b3.addActionListener(this);
+
 
         choice = new JComboBox<>();
         choice.addItem("只显示与其相关");
@@ -73,7 +94,10 @@ public class Main extends JPanel implements ActionListener, ItemListener {
         choice.addItemListener(this);
 
         pTop.add(text,BorderLayout.SOUTH);
-        pTop.add(choice,BorderLayout.EAST);
+        pTop.add(b1,BorderLayout.WEST);
+        pTop.add(b2,BorderLayout.CENTER);
+        pTop.add(b3,BorderLayout.EAST);
+
 
         add(pTop,BorderLayout.NORTH);
 //        add(button,BorderLayout.NORTH);
@@ -85,11 +109,104 @@ public class Main extends JPanel implements ActionListener, ItemListener {
 
     @Override
     public void actionPerformed(ActionEvent e) {
+        String action = e.getActionCommand();
+        switch (action){
+            case "filter":
+                treeFilter(CMD_FILTER);
+                break;
+            case "show":
+                treeFilter(CMD_SHOW);
+                break;
+            case "all":
+                treeFilter(CMD_ALL);
+                break;
+            case "open":
+                readLog();
+                break;
+             default:
+                 System.out.println("default");
+        }
+
+    }
+
+    public void treeFilter(String type){
+        keyWord = text.getText().trim();
+        if(logPath ==null || keyWord.length()==0){
+            return;
+        }
+        String reg = ".*"+"(?i)"+keyWord+".*";
+        if(changed == false){
+            Enumeration ee=rootNode.children();
+            List<Object> list= Collections.list(ee);
+
+            if(type =="filter"){
+                for(Object o :list){
+                    if(       o.toString().matches(reg)      ){
+                        rootNode.remove((MutableTreeNode) o);
+                    }
+                }
+            }else if(type == "show"){
+                for(Object o :list){
+                    if(        !(o.toString().matches(reg))  ){
+                        rootNode.remove((MutableTreeNode) o);
+                    }
+                }
+            }
+            treeModel.reload();
+            changed = true;
+        }else {
+            //重新读取文件.并且逐行过滤
+            System.out.println("此时需要重新读取文件");
+            System.out.println(logPath);
+            clear();
+            File file = new File(logPath);
+            try{
+                BufferedReader br = new BufferedReader(new FileReader(file));
+                String s= null;
+                //tmp为node节点的上一个节点
+                DefaultMutableTreeNode node=null,tmp=null,parent=null;
+                while ( (s = br.readLine() )!=null){
+                    if(  s.matches("^\\d{4}\\-\\d{2}\\-\\d{2}\\s\\d{2}\\:\\d{2}\\:\\d{2}.*")  ){
+                        // get the last node of the root
+                        // check if the node matches the searching pattern
+                        // if matches, do nothing
+                        // else remove it from the root
+                        node = addObject(rootNode,s,false);
+                        parent = (DefaultMutableTreeNode) node.getParent();
+                        if(parent.getIndex(node)>0){
+
+                            tmp = (DefaultMutableTreeNode) parent.getChildAt(   parent.getIndex(node)-1   );
+                            if(    type =="filter" ){
+                                if(  tmp.getUserObject().toString().matches(reg) ){
+                                    System.out.println("00");
+                                    rootNode.remove(tmp);
+                                }
+                            }else if(   type == "show"  ){
+                                System.out.println(keyWord);
+                                if(  !tmp.getUserObject().toString().matches(reg) ){
+                                    rootNode.remove(tmp);
+                                }
+                            }
+                        }
+                    }else{
+                        addObject(node,s,false);
+                    }
+                }
+            }catch (Exception fileNotFountException){
+                System.out.println(fileNotFountException.toString());
+            }
+
+        }
+    }
+
+    public void readLog(){
         int state = chooser.showOpenDialog(null);
         if(state == JFileChooser.APPROVE_OPTION){
             clear();
             File dir = chooser.getCurrentDirectory();
             String fileName = chooser.getSelectedFile().getName();
+            logPath = chooser.getSelectedFile().getAbsolutePath();
+            rootNode.setUserObject(fileName);
             File file = new File(dir,fileName);
             try{
                 reader = new FileReader(file);
@@ -97,12 +214,18 @@ public class Main extends JPanel implements ActionListener, ItemListener {
                 String s= null;
                 DefaultMutableTreeNode node=null;
                 while ( (s=in.readLine())!=null){
-                    if(s.matches("^\\d{4}\\-\\d{2}\\-\\d{2}\\s\\d{2}\\:\\d{2}\\:\\d{2}.*")&&s.contains("")){
-                      node = addObject(rootNode,s,false);
+                    if(  s.matches("^\\d{4}\\-\\d{2}\\-\\d{2}\\s\\d{2}\\:\\d{2}\\:\\d{2}.*")  ){
+                        // get the last node of the root
+                        // check if the node matches the searching pattern
+                        // if matches, do nothing
+                        // else remove it from the root
+                        node = addObject(rootNode,s,false);
+
                     }else{
                         addObject(node,s,false);
                     }
                 }
+
             }catch (Exception e2){
                 System.out.println(e2.toString());
             }
@@ -121,14 +244,12 @@ public class Main extends JPanel implements ActionListener, ItemListener {
             if(action =="只显示与其相关"){
                 for(Object o :list){
                     if(       !o.toString().contains(keyWord)      ){
- //                       System.out.println(o);
                         rootNode.remove((MutableTreeNode) o);
                     }
                 }
             }else {
                 for(Object o :list){
                     if(  (o.toString().contains(keyWord))  ){
-                        //                       System.out.println(o);
                         rootNode.remove((MutableTreeNode) o);
                     }
                 }
@@ -158,7 +279,12 @@ public class Main extends JPanel implements ActionListener, ItemListener {
     private static void createAndShowGUI() {
         //Create and set up the window.
         JFrame frame = new JFrame("DynamicTreeDemo");
+        frame.setLocation(400,300);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        String testStr = ".*"+"(?i)"+"org"+".*"  ;
+        String str ="2019-07-18 00:00:00 [ERROR] [org.springframework.scheduling.quartz.SchedulerFactoryBean#0_Worker-5] [com.virtual.plat.server.task.SyncCrlJobController::start] JobCrlSync Start." ;
+        System.out.println(str.matches(".*(?i)org.*")  );
+
 
         //Create and set up the content pane.
         Main newContentPane = new Main();
