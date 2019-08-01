@@ -1,6 +1,3 @@
-import com.sun.deploy.panel.ITreeNode;
-import org.omg.Messaging.SYNC_WITH_TRANSPORT;
-import sun.reflect.generics.tree.Tree;
 
 import javax.swing.*;
 import javax.swing.event.TreeModelEvent;
